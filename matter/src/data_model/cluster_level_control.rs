@@ -32,25 +32,6 @@ pub enum Attributes {
     Options = 0x000F,
 }
 
-// TODO: Depricate these when add bulk attributes is merged
-fn attr_current_level_new() -> Result<Attribute, Error> {
-    Attribute::new(
-        Attributes::CurrentLevel as u16,
-        AttrValue::Uint8(0),
-        Access::RV,
-        Quality::PERSISTENT,
-    )
-}
-
-fn attr_on_level_new() -> Result<Attribute, Error> {
-    Attribute::new(
-        Attributes::OnLevel as u16,
-        AttrValue::Uint8(0),
-        Access::RV,
-        Quality::PERSISTENT,
-    )
-}
-
 // TODO: Implement Options using a map8 type
 
 #[derive(FromPrimitive)]
@@ -76,10 +57,24 @@ impl LevelControlCluster {
             base: Cluster::new(ID)?,
         });
 
-        cluster.base.add_attribute(attr_current_level_new()?)?;
-        cluster.base.add_attribute(attr_on_level_new()?)?;
 
+        let attrs = [ 
+            Attribute::new(
+                Attributes::CurrentLevel as u16,
+                AttrValue::Uint8(0),
+                Access::RV,
+                Quality::PERSISTENT,
+            )?,
+            Attribute::new(
+                Attributes::OnLevel as u16,
+                AttrValue::Uint8(0),
+                Access::RV,
+                Quality::PERSISTENT,
+            )?
+         ];
+        cluster.base.add_attributes(&attrs)?;
         Ok(cluster)
+
     }
 }
 
@@ -107,7 +102,6 @@ impl ClusterType for LevelControlCluster {
 
                 let cmd_tlv_elements = cmd_req.data;
 
-                let cmd_data_type = cmd_tlv_elements.get_element_type();
 
                 let new_level = 0;
 
