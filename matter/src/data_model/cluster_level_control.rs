@@ -19,7 +19,9 @@ use super::objects::*;
 use crate::{
     error::*,
     interaction_model::{command::CommandReq, core::IMStatusCode},
+    tlv::TLVElement,
 };
+use log::info;
 use num_derive::FromPrimitive;
 
 // ID of base cluster for level control, other specifics are defined for lighting - might need an update in next release
@@ -27,12 +29,44 @@ pub const ID: u32 = 0x0008;
 
 // IDs of attributes
 pub enum Attributes {
-    CurrentLevel = 0x0,
+    CurrentLevel = 0x0000,
+    RemainingTime = 0x0001,
+    MinLevel = 0x0002,
+    MaxLevel = 0x0003,
     OnLevel = 0x0011,
     Options = 0x000F,
+    StartUpCurrentLevel = 0x4000,
 }
 
-// TODO: Implement Options using a map8 type
+enum MoveMode {
+    Up = 0x00,
+    Down = 0x01,
+}
+
+impl MoveMode {
+    pub fn from_int(src: u8) -> MoveMode {
+        if src == 0x00 {
+            MoveMode::Up
+        } else {
+            MoveMode::Down
+        }
+    }
+}
+
+enum StepMode {
+    Up = 0x00,
+    Down = 0x01,
+}
+
+impl StepMode {
+    pub fn from_int(src: u8) -> StepMode {
+        if src == 0x00 {
+            StepMode::Up
+        } else {
+            StepMode::Down
+        }
+    }
+}
 
 #[derive(FromPrimitive)]
 pub enum Commands {
@@ -57,8 +91,7 @@ impl LevelControlCluster {
             base: Cluster::new(ID)?,
         });
 
-
-        let attrs = [ 
+        let attrs = [
             Attribute::new(
                 Attributes::CurrentLevel as u16,
                 AttrValue::Uint8(0),
@@ -70,11 +103,194 @@ impl LevelControlCluster {
                 AttrValue::Uint8(0),
                 Access::RV,
                 Quality::PERSISTENT,
-            )?
-         ];
+            )?,
+            // Default to 0 and 254 - device might setup it's own min/max stuff
+            Attribute::new(
+                Attributes::MinLevel as u16,
+                AttrValue::Uint8(0),
+                Access::RV,
+                Quality::PERSISTENT,
+            )?,
+            Attribute::new(
+                Attributes::MaxLevel as u16,
+                AttrValue::Uint8(254),
+                Access::RV,
+                Quality::PERSISTENT,
+            )?,
+            Attribute::new(
+                Attributes::StartUpCurrentLevel as u16,
+                AttrValue::Uint8(0x00),
+                Access::RV,
+                Quality::PERSISTENT,
+            )?,
+            // Options - probably want a custom type here
+        ];
+
         cluster.base.add_attributes(&attrs)?;
         Ok(cluster)
+    }
 
+    fn set_current_level(&mut self, tlv: &TLVElement) -> Result<(), IMStatusCode> {
+        self.base
+            .write_attribute_from_tlv(Attributes::CurrentLevel as u16, tlv)?;
+        Err(IMStatusCode::Sucess)
+    }
+
+    // TODO: Move level slowly up to a Min/Max
+    fn move_level(&mut self, move_mode: MoveMode, rate: u8) -> Result<(), IMStatusCode> {
+        match move_mode {
+            MoveMode::Up => {
+                info!(
+                    "Increasing current level to MAX Level at a rate of: {}",
+                    rate
+                );
+                // Increase our level until max slowly PER SECOND?
+                // loop ( level < max_level )
+                // also can't exactly loop on this thread -> loop in a background thread??
+                // up
+                // sleep 1 sec
+                Err(IMStatusCode::Sucess)
+            }
+            MoveMode::Down => {
+                info!(
+                    "Decreasing current level to Min Level at a rate of: {}",
+                    rate
+                );
+                // Min / Max might not be defined
+
+                Err(IMStatusCode::Sucess)
+            }
+        }
+    }
+
+    // TODO: Maybe handle arithmetic better
+    fn step_level(&mut self, step_mode: StepMode, step_size: u8) -> Result<(), IMStatusCode> {
+        let old_level = self
+            .base
+            .read_attribute_raw(Attributes::CurrentLevel as u16)?;
+        let mut new_level: u8 = 0;
+
+        match step_mode {
+            StepMode::Up => {
+                if let AttrValue::Uint8(old) = old_level {
+                    new_level = *old + step_size;
+                    info!(
+                        "Stepping current level up by {} to {}",
+                        step_size, new_level
+                    );
+                }
+
+                self.base
+                    .write_attribute_raw(
+                        Attributes::CurrentLevel as u16,
+                        AttrValue::Uint8(new_level),
+                    )
+                    .map_err(|_| IMStatusCode::Failure)?;
+                Err(IMStatusCode::Sucess)
+            }
+            StepMode::Down => {
+                if let AttrValue::Uint8(old) = old_level {
+                    new_level = *old - step_size;
+                    info!(
+                        "Stepping current level down by {} to {}",
+                        step_size, new_level
+                    );
+                }
+
+                self.base
+                    .write_attribute_raw(
+                        Attributes::CurrentLevel as u16,
+                        AttrValue::Uint8(new_level),
+                    )
+                    .map_err(|_| IMStatusCode::Failure)?;
+                Err(IMStatusCode::Sucess)
+            }
+        }
+    }
+}
+
+// Command Handling
+impl LevelControlCluster {
+    fn handle_move_to_lvl(&mut self, cmd_data: &TLVElement) -> Result<(), IMStatusCode> {
+        let mut tlv_iterator = cmd_data.enter().ok_or(Error::Invalid)?;
+
+        let new_level = tlv_iterator.next().ok_or(IMStatusCode::InvalidDataType)?;
+
+        // TODO: Process these before updating level
+        let _trans_time = tlv_iterator.next().ok_or(IMStatusCode::InvalidDataType)?;
+        let _options_mask = tlv_iterator.next().ok_or(IMStatusCode::InvalidDataType)?;
+        let _options_override = tlv_iterator.next().ok_or(IMStatusCode::InvalidDataType)?;
+
+        self.base.write_attribute_from_tlv(Attributes::CurrentLevel as u16, &new_level)
+    }
+
+    fn handle_move(&mut self, cmd_data: &TLVElement) -> Result<(), IMStatusCode> {
+        let mut tlv_iterator = cmd_data.enter().ok_or(Error::Invalid)?;
+
+        let move_mode = tlv_iterator.next().ok_or(Error::Invalid)?.u8()?;
+        let rate = tlv_iterator.next().ok_or(Error::Invalid)?.u8()?;
+        let _options_mask = tlv_iterator.next().ok_or(Error::Invalid)?;
+        let _options_override = tlv_iterator.next().ok_or(Error::Invalid)?;
+
+        // TODO: Receive it, return result and start a background threado n this
+        // self.move_level_to(&move_mode, &rate)        // todo!();
+
+        self.move_level(MoveMode::from_int(move_mode), rate)
+    }
+
+    fn handle_stop(&mut self, cmd_data: &TLVElement) -> Result<(), IMStatusCode> {
+        let mut tlv_iterator = cmd_data.enter().ok_or(Error::Invalid)?;
+        let _options_mask = tlv_iterator.next().ok_or(Error::Invalid)?;
+        let _options_override = tlv_iterator.next().ok_or(Error::Invalid)?;
+
+        self.base
+            .write_attribute_raw(Attributes::RemainingTime as u16, AttrValue::Uint8(0))
+            .map_err(|_| IMStatusCode::Failure)?;
+
+        // TODO: Stop any command in progress
+        // Where do we save current progress of commands?
+
+        Err(IMStatusCode::Sucess)
+    }
+
+    fn handle_step(&mut self, cmd_data: &TLVElement) -> Result<(), IMStatusCode> {
+        let mut tlv_iterator = cmd_data.enter().ok_or(Error::Invalid)?;
+        let step_mode = tlv_iterator.next().ok_or(Error::Invalid)?.u8()?;
+        let step_size = tlv_iterator.next().ok_or(Error::Invalid)?.u8()?;
+        let _options_mask = tlv_iterator.next().ok_or(Error::Invalid)?;
+        let _options_override = tlv_iterator.next().ok_or(Error::Invalid)?;
+
+        let transition_time = tlv_iterator.next().ok_or(Error::Invalid)?;
+
+        self.base
+            .write_attribute_from_tlv(Attributes::RemainingTime as u16, &transition_time)?;
+        self.step_level(StepMode::from_int(step_mode), step_size)?;
+
+        // TODO: Wait before executing? Sleeping this thread seems like a TERRIBLE idea
+        // use std::{thread, time};
+
+        self.base.write_attribute_raw(Attributes::RemainingTime as u16,  AttrValue::Uint16(0))?;
+        Err(IMStatusCode::Sucess)
+    }
+
+    fn handle_move_to_lvl_with_onoff(&mut self, cmd_data: &TLVElement) -> Result<(), IMStatusCode> {
+        // todo!();
+        Err(IMStatusCode::Sucess)
+    }
+
+    fn handle_move_with_onoff(&mut self, cmd_data: &TLVElement) -> Result<(), IMStatusCode> {
+        // todo!();
+        Err(IMStatusCode::Sucess)
+    }
+
+    fn handle_step_with_onoff(&mut self, cmd_data: &TLVElement) -> Result<(), IMStatusCode> {
+        // todo!();
+        Err(IMStatusCode::Sucess)
+    }
+
+    fn handle_stop_with_onoff(&mut self, cmd_data: &TLVElement) -> Result<(), IMStatusCode> {
+        // todo!();
+        Err(IMStatusCode::Sucess)
     }
 }
 
@@ -94,63 +310,17 @@ impl ClusterType for LevelControlCluster {
             .map(num::FromPrimitive::from_u32)
             .ok_or(IMStatusCode::UnsupportedCommand)?
             .ok_or(IMStatusCode::UnsupportedCommand)?;
+
         match cmd {
-            Commands::MoveToLevel => {
-
-
-                // TODO: Get data from cmdReq.data
-
-                let cmd_tlv_elements = cmd_req.data;
-
-
-                let new_level = 0;
-
-                self.base
-                    .write_attribute_raw(
-                        Attributes::CurrentLevel as u16,
-                        AttrValue::Uint8(new_level),
-                    )
-                    .map_err(|_| IMStatusCode::Failure)?;
-
-                Err(IMStatusCode::Sucess)
-            }
-
-            Commands::Move => Err(IMStatusCode::Sucess),
-            Commands::Step => Err(IMStatusCode::Sucess),
-            Commands::Stop => Err(IMStatusCode::Sucess),
-            Commands::MoveToLevelWithOnOff => Err(IMStatusCode::Sucess),
-            Commands::MoveWithOnOff => Err(IMStatusCode::Sucess),
-            Commands::StepWithOnOff => Err(IMStatusCode::Sucess),
-            Commands::StopWithOnOff => Err(IMStatusCode::Sucess),
+            Commands::MoveToLevel => self.handle_move_to_lvl(&cmd_req.data),
+            Commands::Move => self.handle_move(&cmd_req.data),
+            Commands::Step => self.handle_step(&cmd_req.data),
+            Commands::Stop => self.handle_stop(&cmd_req.data),
+            Commands::MoveToLevelWithOnOff => self.handle_move_to_lvl_with_onoff(&cmd_req.data),
+            Commands::MoveWithOnOff => self.handle_move_with_onoff(&cmd_req.data),
+            Commands::StepWithOnOff => self.handle_step_with_onoff(&cmd_req.data),
+            Commands::StopWithOnOff => self.handle_stop_with_onoff(&cmd_req.data),
             Commands::MoveToClosestFrequency => Err(IMStatusCode::Sucess),
         }
-    }
-}
-
-// Command implementations
-
-// TODO: Implement OptionMask and OptionOverride
-pub struct MoveToLevelCommand {
-    Level: u8,
-    TransitionTime: u16,
-}
-
-impl MoveToLevelCommand {
-    pub fn new() -> Result<Box<Self>, Error> {
-        let command = Box::new(MoveToLevelCommand {
-            Level: 0,
-            TransitionTime: 0,
-        });
-
-        Ok(command)
-    }
-
-
-    pub fn from_raw(level: u8, TransitionTime: u16)  -> Result<Box<Self>, Error>  {
-        let mut command = Box::new(MoveToLevelCommand {
-            Level: level,
-            TransitionTime: TransitionTime
-        });
-        Ok(command)
     }
 }
