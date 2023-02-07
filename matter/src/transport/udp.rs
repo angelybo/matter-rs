@@ -17,7 +17,7 @@
 
 use crate::error::*;
 use smol::net::{Ipv6Addr, UdpSocket};
-
+use log::error;
 use super::network::{Address, NetworkInterface};
 
 // We could get rid of the smol here, but keeping it around in case we have to process
@@ -43,7 +43,7 @@ impl UdpListener {
 impl NetworkInterface for UdpListener {
     fn recv(&self, in_buf: &mut [u8]) -> Result<(usize, Address), Error> {
         let (size, addr) = smol::block_on(self.socket.recv_from(in_buf)).map_err(|e| {
-            println!("Error on the network: {:?}", e);
+            error!("Error on the network: {:?}", e);
             Error::Network
         })?;
         Ok((size, Address::Udp(addr)))

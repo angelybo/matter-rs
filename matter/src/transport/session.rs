@@ -29,7 +29,7 @@ use crate::{
 };
 use boxslab::{BoxSlab, Slab};
 use colored::*;
-use log::{info, trace};
+use log::{info, trace, debug};
 use rand::Rng;
 
 use super::{
@@ -499,7 +499,7 @@ impl SessionMgr {
         let network = self.network.as_ref().ok_or(Error::NoNetworkInterface)?;
         let peer = proto_tx.peer;
         network.send(proto_tx.as_borrow_slice(), peer)?;
-        println!("Message Sent to {}", peer);
+        debug!("Message Sent to {}", peer);
         Ok(())
     }
 

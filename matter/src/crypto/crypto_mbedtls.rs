@@ -187,7 +187,7 @@ impl CryptoKeyPair for KeyPair {
         let mbedtls_sign = &mbedtls_sign[..len];
 
         if let Err(e) = tmp_key.verify(hash::Type::Sha256, &msg_hash, mbedtls_sign) {
-            println!("The error is {}", e);
+            error!("The error is {}", e);
             Err(Error::InvalidSignature)
         } else {
             Ok(())

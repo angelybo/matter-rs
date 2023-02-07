@@ -23,7 +23,7 @@ use crate::{
     // TODO: This layer shouldn't really depend on the TLV layer, should create an abstraction layer
     tlv::{Nullable, TLVElement, TLVWriter, TagType},
 };
-use log::error;
+use log::{debug, error};
 use num_derive::FromPrimitive;
 use rand::Rng;
 use std::fmt::{self, Debug};
@@ -61,7 +61,7 @@ pub trait ClusterType {
 
     fn handle_command(&mut self, cmd_req: &mut CommandReq) -> Result<(), IMStatusCode> {
         let cmd = cmd_req.cmd.path.leaf.map(|a| a as u16);
-        println!("Received command: {:?}", cmd);
+        debug!("Received command: {:?}", cmd);
 
         Err(IMStatusCode::UnsupportedCommand)
     }
