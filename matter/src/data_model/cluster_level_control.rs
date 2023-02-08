@@ -130,12 +130,6 @@ impl LevelControlCluster {
         Ok(cluster)
     }
 
-    fn set_current_level(&mut self, tlv: &TLVElement) -> Result<(), IMStatusCode> {
-        self.base
-            .write_attribute_from_tlv(Attributes::CurrentLevel as u16, tlv)?;
-        Err(IMStatusCode::Sucess)
-    }
-
     // TODO: Move level slowly up to a Min/Max
     fn move_level(&mut self, move_mode: MoveMode, rate: u8) -> Result<(), IMStatusCode> {
         match move_mode {
@@ -144,11 +138,8 @@ impl LevelControlCluster {
                     "Increasing current level to MAX Level at a rate of: {}",
                     rate
                 );
-                // Increase our level until max slowly PER SECOND?
-                // loop ( level < max_level )
-                // also can't exactly loop on this thread -> loop in a background thread??
-                // up
-                // sleep 1 sec
+
+                // TODO: Slowly move our level up in the background.
                 Err(IMStatusCode::Sucess)
             }
             MoveMode::Down => {
@@ -156,7 +147,7 @@ impl LevelControlCluster {
                     "Decreasing current level to Min Level at a rate of: {}",
                     rate
                 );
-                // Min / Max might not be defined
+                // TODO: Slowly move our level up in the background.
 
                 Err(IMStatusCode::Sucess)
             }
@@ -232,9 +223,6 @@ impl LevelControlCluster {
         let _options_mask = tlv_iterator.next().ok_or(Error::Invalid)?;
         let _options_override = tlv_iterator.next().ok_or(Error::Invalid)?;
 
-        // TODO: Receive it, return result and start a background threado n this
-        // self.move_level_to(&move_mode, &rate)        // todo!();
-
         self.move_level(MoveMode::from_int(move_mode), rate)
     }
 
@@ -247,29 +235,32 @@ impl LevelControlCluster {
             .write_attribute_raw(Attributes::RemainingTime as u16, AttrValue::Uint8(0))
             .map_err(|_| IMStatusCode::Failure)?;
 
-        // TODO: Stop any command in progress
-        // Where do we save current progress of commands?
+        // TODO: Stop any command in progress - implement when we implement progress for commands
 
         Err(IMStatusCode::Sucess)
     }
 
     fn handle_step(&mut self, cmd_data: &TLVElement) -> Result<(), IMStatusCode> {
         let mut tlv_iterator = cmd_data.enter().ok_or(Error::Invalid)?;
+
         let step_mode = tlv_iterator.next().ok_or(Error::Invalid)?.u8()?;
         let step_size = tlv_iterator.next().ok_or(Error::Invalid)?.u8()?;
         let _options_mask = tlv_iterator.next().ok_or(Error::Invalid)?;
         let _options_override = tlv_iterator.next().ok_or(Error::Invalid)?;
+        
+        // TODO: Implement this
+        let _transition_time = tlv_iterator.next().ok_or(Error::Invalid)?;
+        // self.base
+        //     .write_attribute_from_tlv(Attributes::RemainingTime as u16, &transition_time)?;
 
-        let transition_time = tlv_iterator.next().ok_or(Error::Invalid)?;
+        let old_level = self.base.read_attribute_raw(Attributes::CurrentLevel as u16)?;
 
-        self.base
-            .write_attribute_from_tlv(Attributes::RemainingTime as u16, &transition_time)?;
-        self.step_level(StepMode::from_int(step_mode), step_size)?;
+        // self.step_level(StepMode::from_int(step_mode), step_size)?;
 
         // TODO: Wait before executing? Sleeping this thread seems like a TERRIBLE idea
         // use std::{thread, time};
 
-        self.base.write_attribute_raw(Attributes::RemainingTime as u16,  AttrValue::Uint16(0))?;
+        // self.base.write_attribute_raw(Attributes::RemainingTime as u16,  AttrValue::Uint16(0))?;
         Err(IMStatusCode::Sucess)
     }
 
