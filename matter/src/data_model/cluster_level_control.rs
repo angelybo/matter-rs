@@ -83,9 +83,9 @@ pub enum Commands {
 
 #[cfg(feature = "state_hooks")]
 pub struct LevelControlHooks {
-    pub move_to_lvl_hook: Box<dyn Fn() >,
-    pub move_hook: Box<dyn Fn() >,
-    pub step_hook: Box<dyn Fn() >,
+    pub move_to_lvl_hook: Box<dyn Fn(u8) >,
+    pub move_hook: Box<dyn Fn(u8) >,
+    pub step_hook: Box<dyn Fn(i32) >,
     pub stop_hook: Box<dyn Fn() >,
 
     // The rest are same but interact weirdly with onOff - check spec again
@@ -94,12 +94,11 @@ pub struct LevelControlHooks {
 #[cfg(feature = "state_hooks")]
 impl Default for LevelControlHooks {
     fn default() -> Self {
-        let empty_hook = || {  };
         Self { 
-            move_to_lvl_hook: Box::new(empty_hook),
-            move_hook: Box::new(empty_hook),
-            step_hook: Box::new(empty_hook),
-            stop_hook: Box::new(empty_hook)
+            move_to_lvl_hook: Box::new(|a: u8| {}),
+            move_hook: Box::new(|a: u8| {}),
+            step_hook: Box::new(|a: i32| {}),
+            stop_hook: Box::new(|| {})
         }
     }
 }
@@ -243,7 +242,7 @@ impl LevelControlCluster {
         let new_level = tlv_iterator.next().ok_or(IMStatusCode::InvalidDataType)?;
 
         // TODO: Process these before updating level
-        let _trans_time = tlv_iterator.next().ok_or(IMStatusCode::InvalidDataType)?;
+        // let _trans_time = tlv_iterator.next().ok_or(IMStatusCode::InvalidDataType)?;
         let _options_mask = tlv_iterator.next().ok_or(IMStatusCode::InvalidDataType)?;
         let _options_override = tlv_iterator.next().ok_or(IMStatusCode::InvalidDataType)?;
 
@@ -279,16 +278,16 @@ impl LevelControlCluster {
         let mut tlv_iterator = cmd_data.enter().ok_or(Error::Invalid)?;
 
         let step_mode = tlv_iterator.next().ok_or(Error::Invalid)?.u8()?;
-        let step_size = tlv_iterator.next().ok_or(Error::Invalid)?.u8()?;
+        // let step_size = tlv_iterator.next().ok_or(Error::Invalid)?.u8()?;
         let _options_mask = tlv_iterator.next().ok_or(Error::Invalid)?;
         let _options_override = tlv_iterator.next().ok_or(Error::Invalid)?;
         
         // TODO: Implement this
-        let _transition_time = tlv_iterator.next().ok_or(Error::Invalid)?;
+        // let _transition_time = tlv_iterator.next().ok_or(Error::Invalid)?;
         // self.base
         //     .write_attribute_from_tlv(Attributes::RemainingTime as u16, &transition_time)?;
 
-        let old_level = self.base.read_attribute_raw(Attributes::CurrentLevel as u16)?;
+        // let old_level = self.base.read_attribute_raw(Attributes::CurrentLevel as u16)?;
 
         // self.step_level(StepMode::from_int(step_mode), step_size)?;
 
