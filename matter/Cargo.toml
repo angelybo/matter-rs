@@ -66,3 +66,8 @@ libmdns = { git = "https://github.com/angelybo/libmdns.git", branch = "return_al
 [[example]]
 name = "onoff_light"
 path = "../examples/onoff_light/src/main.rs"
+
+
+[[example]]
+name = "onoff_light_w_hooks"
+path = "../examples/onoff_light w_hooks/src/main.rs"

@@ -54,6 +54,7 @@ fn main() {
         #[cfg(feature="state_hooks")]
         {
             let on = || { println!("[CALLBACK] On callback called!") };
+            let on = |a: i32| { println!("Got vol argument: {}",a) };
             let off = || { println!("[CALLBACK] Off callback called!") };
             let toggle = || { println!("[CALLBACK] Toggle callback called!") };
     
