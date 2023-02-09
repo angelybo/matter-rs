@@ -35,7 +35,8 @@ use std::sync::RwLockWriteGuard;
 
 #[cfg(feature = "state_hooks")]
 use super::cluster_on_off::OnOffHooks;
-
+#[cfg(feature = "state_hooks")]
+use super::cluster_level_control::LevelControlHooks;
 
 pub const DEV_TYPE_ROOT_NODE: DeviceType = DeviceType {
     dtype: 0x0016,
@@ -107,4 +108,12 @@ pub fn device_type_add_speaker(node: &mut WriteNode) -> Result<u32, Error> {
     Ok(endpoint)
 }
 
+#[cfg(feature = "state_hooks")]
+pub fn device_type_add_speaker_w_hooks(node: &mut WriteNode, state_hooks: LevelControlHooks) -> Result<u32, Error> {
+    let endpoint = node.add_endpoint(DEV_TYPE_SPEAKER)?;
 
+    let mut cluster = LevelControlCluster::new()?;
+    cluster.set_hooks(state_hooks);
+    node.add_cluster(endpoint, cluster)?;
+    Ok(endpoint)
+}

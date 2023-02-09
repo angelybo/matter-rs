@@ -21,7 +21,7 @@ use crate::{
     interaction_model::{command::CommandReq, core::IMStatusCode},
     tlv::TLVElement,
 };
-use log::info;
+use log::{info, Level};
 use num_derive::FromPrimitive;
 
 // ID of base cluster for level control, other specifics are defined for lighting - might need an update in next release
@@ -81,14 +81,44 @@ pub enum Commands {
     MoveToClosestFrequency = 0x08,
 }
 
+#[cfg(feature = "state_hooks")]
+pub struct LevelControlHooks {
+    pub move_to_lvl_hook: Box<dyn Fn() >,
+    pub move_hook: Box<dyn Fn() >,
+    pub step_hook: Box<dyn Fn() >,
+    pub stop_hook: Box<dyn Fn() >,
+
+    // The rest are same but interact weirdly with onOff - check spec again
+}
+
+#[cfg(feature = "state_hooks")]
+impl Default for LevelControlHooks {
+    fn default() -> Self {
+        let empty_hook = || {  };
+        Self { 
+            move_to_lvl_hook: Box::new(empty_hook),
+            move_hook: Box::new(empty_hook),
+            step_hook: Box::new(empty_hook),
+            stop_hook: Box::new(empty_hook)
+        }
+    }
+}
+
 pub struct LevelControlCluster {
     base: Cluster,
+
+    #[cfg(feature = "state_hooks")]
+    pub hooks: LevelControlHooks
 }
 
 impl LevelControlCluster {
     pub fn new() -> Result<Box<Self>, Error> {
         let mut cluster = Box::new(LevelControlCluster {
             base: Cluster::new(ID)?,
+
+            #[cfg(feature = "state_hooks")]
+            hooks: LevelControlHooks::default()
+
         });
 
         let attrs = [
@@ -128,6 +158,11 @@ impl LevelControlCluster {
 
         cluster.base.add_attributes(&attrs)?;
         Ok(cluster)
+    }
+
+    #[cfg(feature = "state_hooks")]
+    pub fn set_hooks(&mut self, new_hooks: LevelControlHooks) {
+        self.hooks = new_hooks;
     }
 
     // TODO: Move level slowly up to a Min/Max
@@ -261,6 +296,8 @@ impl LevelControlCluster {
         // use std::{thread, time};
 
         // self.base.write_attribute_raw(Attributes::RemainingTime as u16,  AttrValue::Uint16(0))?;
+        #[cfg(features = "state_hooks")]
+        (step.hooks.step_hook)();
         Err(IMStatusCode::Sucess)
     }
 
