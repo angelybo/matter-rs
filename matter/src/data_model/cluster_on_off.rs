@@ -47,17 +47,48 @@ fn attr_on_off_new() -> Result<Attribute, Error> {
     )
 }
 
+#[cfg(feature = "state_hooks")]
+pub struct OnOffHooks {
+    pub on_hook: Box<dyn Fn() >,
+    pub off_hook: Box<dyn Fn() >,
+    pub toggle_hook: Box<dyn Fn() >,
+}
+
+#[cfg(feature = "state_hooks")]
+impl Default for OnOffHooks {
+    fn default() -> Self {
+        let foo = || {  };
+        Self { 
+            on_hook: Box::new(foo),
+            off_hook: Box::new(foo),
+            toggle_hook: Box::new(foo) 
+        }
+    }
+}
+
 pub struct OnOffCluster {
     base: Cluster,
+
+    // Allow callbacks to the outside world
+    #[cfg(feature = "state_hooks")]
+    pub hooks: OnOffHooks
 }
 
 impl OnOffCluster {
     pub fn new() -> Result<Box<Self>, Error> {
         let mut cluster = Box::new(OnOffCluster {
             base: Cluster::new(ID)?,
+
+            #[cfg(feature = "state_hooks")]
+            hooks: OnOffHooks::default()
         });
         cluster.base.add_attribute(attr_on_off_new()?)?;
         Ok(cluster)
+    }
+
+    #[cfg(feature = "state_hooks")]
+    pub fn set_hooks(&mut self, new_hooks: OnOffHooks) {
+        self.hooks = new_hooks;
     }
 }
 
@@ -90,6 +121,10 @@ impl ClusterType for OnOffCluster {
                         .map_err(|_| IMStatusCode::Failure)?;
                 }
                 cmd_req.trans.complete();
+
+                #[cfg(feature = "state_hooks")]
+                (self.hooks.off_hook)();
+
                 Err(IMStatusCode::Sucess)
             }
             Commands::On => {
@@ -105,6 +140,10 @@ impl ClusterType for OnOffCluster {
                 }
 
                 cmd_req.trans.complete();
+
+                #[cfg(feature = "state_hooks")]
+                (self.hooks.on_hook)();
+
                 Err(IMStatusCode::Sucess)
             }
             Commands::Toggle => {
@@ -121,6 +160,11 @@ impl ClusterType for OnOffCluster {
                     .write_attribute_raw(Attributes::OnOff as u16, AttrValue::Bool(!value))
                     .map_err(|_| IMStatusCode::Failure)?;
                 cmd_req.trans.complete();
+
+
+                #[cfg(feature = "state_hooks")]
+                (self.hooks.toggle_hook)();
+
                 Err(IMStatusCode::Sucess)
             }
         }

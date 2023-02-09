@@ -32,7 +32,6 @@ pub struct SysMdnsService {
     }
 
 
-
 /// Publish a mDNS service
 /// name - can be a service name (comma separate subtypes may follow)
 /// regtype - registration type (e.g. _matter_.tcp etc)
