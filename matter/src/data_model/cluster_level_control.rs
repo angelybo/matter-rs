@@ -247,9 +247,16 @@ impl LevelControlCluster {
         // let _options_mask = tlv_iterator.next().ok_or(IMStatusCode::InvalidDataType)?;
         // let _options_override = tlv_iterator.next().ok_or(IMStatusCode::InvalidDataType)?;
 
-        info!("Moving to new level!");
-        self.base
-            .write_attribute_from_tlv(Attributes::CurrentLevel as u16, &new_level)
+        let res = self.base
+            .write_attribute_from_tlv(Attributes::CurrentLevel as u16, &new_level.clone()).map_err(|_| IMStatusCode::Failure);
+        match res {
+            Ok(t) => { 
+                Err(IMStatusCode::Sucess)
+            },
+            Err(e) => {
+                Err(IMStatusCode::Failure)
+            }
+        }       
     }
 
     // TODO: Move this according to transition time
