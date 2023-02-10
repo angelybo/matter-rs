@@ -18,6 +18,7 @@
 use super::cluster_basic_information::BasicInfoCluster;
 use super::cluster_basic_information::BasicInfoConfig;
 use super::cluster_on_off::OnOffCluster;
+use super::cluster_level_control::LevelControlCluster;
 use super::objects::*;
 use super::sdm::admin_commissioning::AdminCommCluster;
 use super::sdm::dev_att::DevAttDataFetcher;
@@ -76,5 +77,13 @@ const DEV_TYPE_ON_OFF_LIGHT: DeviceType = DeviceType {
 pub fn device_type_add_on_off_light(node: &mut WriteNode) -> Result<u32, Error> {
     let endpoint = node.add_endpoint(DEV_TYPE_ON_OFF_LIGHT)?;
     node.add_cluster(endpoint, OnOffCluster::new()?)?;
+    Ok(endpoint)
+}
+
+pub fn device_type_add_dimmable_light(node: &mut WriteNode) -> Result<u32, Error> {
+    let endpoint = node.add_endpoint(DEV_TYPE_ON_OFF_LIGHT)?;
+    node.add_cluster(endpoint, OnOffCluster::new()?)?;
+    node.add_cluster(endpoint, LevelControlCluster::new()?)?;
+
     Ok(endpoint)
 }
