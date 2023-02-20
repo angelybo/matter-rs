@@ -23,6 +23,7 @@ use crate::{
 };
 use log::info;
 use num_derive::FromPrimitive;
+use std::sync::{Arc, Mutex};
 
 pub const ID: u32 = 0x0006;
 
@@ -30,7 +31,7 @@ pub enum Attributes {
     OnOff = 0x0,
 }
 
-#[derive(FromPrimitive)]
+#[derive(FromPrimitive, PartialEq)]
 pub enum Commands {
     Off = 0x0,
     On = 0x01,
@@ -47,17 +48,50 @@ fn attr_on_off_new() -> Result<Attribute, Error> {
     )
 }
 
+struct ClusterCallback {
+    name: Commands,
+    callback: Box<dyn FnMut()>,
+}
+
+pub struct UpdateData {
+    on_off: bool,
+    is_fresh: bool
+}
+
+impl UpdateData {
+    pub fn update_state(&mut self, state: bool) {
+        self.on_off = state;
+        self.is_fresh = true;
+    }
+}
+
 pub struct OnOffCluster {
     base: Cluster,
+    callbacks: Vec<ClusterCallback>,
+    update_state: Arc<Mutex<UpdateData>>
 }
 
 impl OnOffCluster {
     pub fn new() -> Result<Box<Self>, Error> {
         let mut cluster = Box::new(OnOffCluster {
             base: Cluster::new(ID)?,
+            callbacks: vec!(),
+            update_state: Arc::new(Mutex::new(UpdateData { on_off: false, is_fresh: false }))
         });
         cluster.base.add_attribute(attr_on_off_new()?)?;
         Ok(cluster)
+    }
+
+    pub fn add_callback(&mut self, cmd: Commands, cb: Box<dyn FnMut()> ) {
+        self.callbacks.push(ClusterCallback{ name: cmd, callback: cb });
+    }
+
+    pub fn run_callback(&mut self, cmd: Commands) {
+        for cb in self.callbacks.iter_mut() {
+            if cb.name == cmd {
+                (cb.callback)();
+            }   
+        }
     }
 }
 
@@ -89,6 +123,8 @@ impl ClusterType for OnOffCluster {
                         .write_attribute_raw(Attributes::OnOff as u16, AttrValue::Bool(false))
                         .map_err(|_| IMStatusCode::Failure)?;
                 }
+
+                self.run_callback(Commands::Off);
                 cmd_req.trans.complete();
                 Err(IMStatusCode::Sucess)
             }
@@ -104,6 +140,7 @@ impl ClusterType for OnOffCluster {
                         .map_err(|_| IMStatusCode::Failure)?;
                 }
 
+                self.run_callback(Commands::On);
                 cmd_req.trans.complete();
                 Err(IMStatusCode::Sucess)
             }
@@ -120,6 +157,8 @@ impl ClusterType for OnOffCluster {
                 self.base
                     .write_attribute_raw(Attributes::OnOff as u16, AttrValue::Bool(!value))
                     .map_err(|_| IMStatusCode::Failure)?;
+                
+                self.run_callback(Commands::Toggle);
                 cmd_req.trans.complete();
                 Err(IMStatusCode::Sucess)
             }
