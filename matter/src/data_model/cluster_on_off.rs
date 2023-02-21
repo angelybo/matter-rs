@@ -103,6 +103,46 @@ impl ClusterType for OnOffCluster {
         &mut self.base
     }
 
+    fn read_attribute(
+        &self,
+        access_req: &mut crate::acl::AccessReq,
+        encoder: &mut dyn Encoder,
+        attr: &AttrDetails,
+    ) {
+        let mut error = IMStatusCode::Sucess;
+        let base = self.base();
+        let a = if let Ok(a) = base.get_attribute(attr.attr_id) {
+            a
+        } else {
+            encoder.encode_status(IMStatusCode::UnsupportedAttribute, 0);
+            return;
+        };
+        if !a.access.contains(Access::READ) {
+            error = IMStatusCode::UnsupportedRead;
+        }
+        access_req.set_target_perms(a.access);
+        if !access_req.allow() {
+            error = IMStatusCode::UnsupportedAccess;
+        }
+        if error != IMStatusCode::Sucess {
+            encoder.encode_status(error, 0);
+        } else if Attribute::is_system_attr(attr.attr_id) {
+            self.base().read_system_attribute(encoder, a)
+        } else if a.value != AttrValue::Custom {
+            // Read data from event loop
+            let update_state = self.update_state.lock().unwrap();
+
+            if update_state.is_fresh {
+                let val = AttrValue::Bool(update_state.on_off);
+                encoder.encode(EncodeValue::Value(&val))
+            } else {
+                encoder.encode(EncodeValue::Value(&a.value))
+            }
+        } else {
+            self.read_custom_attribute(encoder, attr)
+        }
+    }
+
     fn handle_command(&mut self, cmd_req: &mut CommandReq) -> Result<(), IMStatusCode> {
         let cmd = cmd_req
             .cmd
