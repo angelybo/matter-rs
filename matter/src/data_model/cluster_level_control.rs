@@ -299,7 +299,7 @@ impl LevelControlCluster {
             callback: cb,
         });
     }
-    pub fn add_data_callback<T, U>(&mut self, name: Commands, cb: Box<dyn FnMut(u8, u16, u8)>) {
+    pub fn add_data_callback(&mut self, name: Commands, cb: Box<dyn FnMut(u8, u16, u8)>) {
         self.d_callbacks.push(DataCallback {
             name: name,
             callback: cb,
